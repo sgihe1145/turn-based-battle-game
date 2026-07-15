@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>回合制技能对战</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #1a1a2e;
+    color: #eee;
+    font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    padding: 20px;
+  }
+  .game-container {
+    background: #16213e;
+    border-radius: 16px;
+    padding: 24px;
+    max-width: 480px;
+    width: 100%;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  }
+  h1 {
+    text-align: center;
+    color: #e94560;
+    margin-bottom: 20px;
+    font-size: 26px;
+  }
+  .battle-arena {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    gap: 16px;
+  }
+  .character {
+    flex: 1;
+    text-align: center;
+    padding: 16px;
+    border-radius: 12px;
+    background: #0f3460;
+    position: relative;
+  }
+  .character.player { border: 2px solid #00d9ff; }
+  .character.enemy { border: 2px solid #e94560; }
+  .char-icon {
+    font-size: 48px;
+    margin-bottom: 8px;
+  }
+  .char-name {
+    font-weight: bold;
+    font-size: 16px;
+    margin-bottom: 8px;
+  }
+  .hp-bar {
+    background: #333;
+    border-radius: 8px;
+    height: 22px;
+    overflow: hidden;
+    margin-bottom: 6px;
+    position: relative;
+  }
+  .hp-fill {
+    height: 100%;
+    border-radius: 8px;
+    transition: width 0.4s ease;
+    position: relative;
+  }
+  .player .hp-fill { background: linear-gradient(90deg, #00d9ff, #00ff88); }
+  .enemy .hp-fill { background: linear-gradient(90deg, #e94560, #ff6b6b); }
+  .hp-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 12px;
+    font-weight: bold;
+    color: #fff;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.7);
+    white-space: nowrap;
+  }
+  .mp-bar {
+    background: #333;
+    border-radius: 8px;
+    height: 16px;
+    overflow: hidden;
+    position: relative;
+  }
+  .mp-fill {
+    height: 100%;
+    border-radius: 8px;
+    transition: width 0.4s ease;
+    background: linear-gradient(90deg, #feca57, #ff9f43);
+  }
+  .mp-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 10px;
+    color: #fff;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.7);
+  }
+  .vs {
+    font-size: 28px;
+    font-weight: bold;
+    color: #feca57;
+  }
+  .buff-tag {
+    display: inline-block;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    margin-top: 6px;
+    font-weight: bold;
+  }
+  .buff-def { background: #54a0ff; color: #fff; }
+  .log {
+    background: #0f3460;
+    border-radius: 10px;
+    padding: 12px;
+    height: 140px;
+    overflow-y: auto;
+    margin-bottom: 16px;
+    font-size: 13px;
+    line-height: 1.7;
+  }
+  .log-entry {
+    padding: 3px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+  }
+  .log-entry:last-child { border-bottom: none; }
+  .log-player { color: #00d9ff; }
+  .log-enemy { color: #e94560; }
+  .log-system { color: #feca57; }
+  .log-damage { color: #ff6b6b; font-weight: bold; }
+  .log-heal { color: #00ff88; font-weight: bold; }
+  .skills {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .skill-btn {
+    padding: 14px;
+    border: none;
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.2s;
+    color: #fff;
+    position: relative;
+    overflow: hidden;
+  }
+  .skill-btn:hover:not(:disabled) { transform: translateY(-2px); filter: brightness(1.15); }
+  .skill-btn:active:not(:disabled) { transform: translateY(0); }
+  .skill-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .skill-atk { background: linear-gradient(135deg, #e94560, #c73659); }
+  .skill-heavy { background: linear-gradient(135deg, #ff6b6b, #ee5a6f); }
+  .skill-heal { background: linear-gradient(135deg, #00d9ff, #00ff88); color: #16213e; }
+  .skill-def { background: linear-gradient(135deg, #54a0ff, #2e86de); }
+  .skill-mp {
+    font-size: 11px;
+    opacity: 0.85;
+    margin-top: 3px;
+    display: block;
+    font-weight: normal;
+  }
+  .turn-indicator {
+    text-align: center;
+    font-size: 14px;
+    color: #feca57;
+    margin-bottom: 10px;
+    min-height: 20px;
+  }
+  .overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.75);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 100;
+  }
+  .modal {
+    background: #16213e;
+    border-radius: 16px;
+    padding: 32px;
+    text-align: center;
+    border: 2px solid #e94560;
+    max-width: 360px;
+    width: 90%;
+  }
+  .modal h2 { font-size: 24px; margin-bottom: 12px; }
+  .modal p { color: #aaa; margin-bottom: 20px; font-size: 14px; }
+  .modal-win { border-color: #00ff88; }
+  .modal-win h2 { color: #00ff88; }
+  .modal-lose { border-color: #e94560; }
+  .modal-lose h2 { color: #e94560; }
+  .restart-btn {
+    padding: 12px 32px;
+    border: none;
+    border-radius: 10px;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    background: linear-gradient(135deg, #feca57, #ff9f43);
+    color: #16213e;
+    transition: all 0.2s;
+  }
+  .restart-btn:hover { filter: brightness(1.15); transform: scale(1.05); }
+  .shake { animation: shake 0.4s; }
+  @keyframes shake {
+    0%,100%{transform:translateX(0);}
+    25%{transform:translateX(-8px);}
+    50%{transform:translateX(8px);}
+    75%{transform:translateX(-8px);}
+  }
+  .damage-popup {
+    position: absolute;
+    font-size: 22px;
+    font-weight: bold;
+    animation: floatUp 0.8s ease-out forwards;
+    pointer-events: none;
+    z-index: 10;
+  }
+  @keyframes floatUp {
+    0% { opacity: 1; transform: translateY(0) scale(1); }
+    100% { opacity: 0; transform: translateY(-50px) scale(1.3); }
+  }
+  .stats-row {
+    display: flex;
+    justify-content: center;
+    gap: 16px;
+    font-size: 12px;
+    color: #aaa;
+    margin-top: 4px;
+  }
+</style>
+</head>
+<body>
+
+<div class="game-container">
+  <h1>⚔️ 技能大对决</h1>
+  
+  <div class="battle-arena">
+    <div class="character player" id="playerBox">
+      <div class="char-icon">🧙‍♂️</div>
+      <div class="char-name">勇者</div>
+      <div class="hp-bar">
+        <div class="hp-fill" id="playerHpFill" style="width:100%"></div>
+        <div class="hp-text" id="playerHpText">100/100</div>
+      </div>
+      <div class="mp-bar">
+        <div class="mp-fill" id="playerMpFill" style="width:100%"></div>
+        <div class="mp-text" id="playerMpText">50/50</div>
+      </div>
+      <div id="playerBuff"></div>
+    </div>
+    
+    <div class="vs">VS</div>
+    
+    <div class="character enemy" id="enemyBox">
+      <div class="char-icon">👹</div>
+      <div class="char-name">魔王</div>
+      <div class="hp-bar">
+        <div class="hp-fill" id="enemyHpFill" style="width:100%"></div>
+        <div class="hp-text" id="enemyHpText">150/150</div>
+      </div>
+      <div class="mp-bar">
+        <div class="mp-fill" id="enemyMpFill" style="width:100%"></div>
+        <div class="mp-text" id="enemyMpText">40/40</div>
+      </div>
+      <div id="enemyBuff"></div>
+    </div>
+  </div>
+
+  <div class="turn-indicator" id="turnIndicator">你的回合！选择技能</div>
+  
+  <div class="log" id="log"></div>
+  
+  <div class="skills">
+    <button class="skill-btn skill-atk" onclick="playerAction('attack')">
+      ⚔️ 普通攻击
+      <span class="skill-mp">伤害 15-25 | 消耗 0 MP</span>
+    </button>
+    <button class="skill-btn skill-heavy" onclick="playerAction('heavy')">
+      💥 重击
+      <span class="skill-mp">伤害 35-50 | 消耗 15 MP</span>
+    </button>
+    <button class="skill-btn skill-heal" onclick="playerAction('heal')">
+      💚 治疗术
+      <span class="skill-mp">回复 20-30 HP | 消耗 12 MP</span>
+    </button>
+    <button class="skill-btn skill-def" onclick="playerAction('defend')">
+      🛡️ 防御姿态
+      <span class="skill-mp">下回合减伤50% | 消耗 8 MP</span>
+    </button>
+  </div>
+</div>
+
+<script>
+const SKILLS = {
+  attack: { name: '普通攻击', dmgMin: 15, dmgMax: 25, mp: 0, type: 'atk' },
+  heavy:  { name: '重击',     dmgMin: 35, dmgMax: 50, mp: 15, type: 'atk', missChance: 0.2 },
+  heal:   { name: '治疗术',   healMin: 20, healMax: 30, mp: 12, type: 'heal' },
+  defend: { name: '防御姿态', mp: 8, type: 'def', reduce: 0.5 }
+};
+
+let player = { hp: 100, maxHp: 100, mp: 50, maxMp: 50, def: false };
+let enemy  = { hp: 150, maxHp: 150, mp: 40, maxMp: 40, def: false };
+let isPlayerTurn = true;
+let gameOver = false;
+
+function log(msg, cls) {
+  const logEl = document.getElementById('log');
+  const entry = document.createElement('div');
+  entry.className = 'log-entry';
+  entry.innerHTML = `<span class="${cls || ''}">${msg}</span>`;
+  logEl.appendChild(entry);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function rand(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function updateUI() {
+  document.getElementById('playerHpFill').style.width = (player.hp / player.maxHp * 100) + '%';
+  document.getElementById('playerHpText').textContent = `${Math.max(0, player.hp)}/${player.maxHp}`;
+  document.getElementById('playerMpFill').style.width = (player.mp / player.maxMp * 100) + '%';
+  document.getElementById('playerMpText').textContent = `${player.mp}/${player.maxMp}`;
+  
+  document.getElementById('enemyHpFill').style.width = (enemy.hp / enemy.maxHp * 100) + '%';
+  document.getElementById('enemyHpText').textContent = `${Math.max(0, enemy.hp)}/${enemy.maxHp}`;
+  document.getElementById('enemyMpFill').style.width = (enemy.mp / enemy.maxMp * 100) + '%';
+  document.getElementById('enemyMpText').textContent = `${enemy.mp}/${enemy.maxMp}`;
+  
+  document.getElementById('playerBuff').innerHTML = player.def ? '<span class="buff-tag buff-def">🛡️ 防御中</span>' : '';
+  document.getElementById('enemyBuff').innerHTML = enemy.def ? '<span class="buff-tag buff-def">🛡️ 防御中</span>' : '';
+  
+  document.querySelectorAll('.skill-btn').forEach(btn => {
+    btn.disabled = !isPlayerTurn || gameOver;
+  });
+  
+  document.getElementById('turnIndicator').textContent = gameOver ? '战斗结束' : (isPlayerTurn ? '你的回合！选择技能' : '敌方回合...');
+}
+
+function showDamage(targetId, text, color) {
+  const box = document.getElementById(targetId);
+  const popup = document.createElement('div');
+  popup.className = 'damage-popup';
+  popup.textContent = text;
+  popup.style.color = color;
+  popup.style.left = '50%';
+  popup.style.top = '20%';
+  popup.style.transform = 'translateX(-50%)';
+  box.appendChild(popup);
+  box.classList.add('shake');
+  setTimeout(() => {
+    popup.remove();
+    box.classList.remove('shake');
+  }, 800);
+}
+
+function checkWin() {
+  if (enemy.hp <= 0) {
+    gameOver = true;
+    enemy.hp = 0;
+    updateUI();
+    log('🎉 魔王被击败了！你赢了！', 'log-system');
+    setTimeout(() => showModal(true), 600);
+    return true;
+  }
+  if (player.hp <= 0) {
+    gameOver = true;
+    player.hp = 0;
+    updateUI();
+    log('💀 你被魔王击败了...', 'log-system');
+    setTimeout(() => showModal(false), 600);
+    return true;
+  }
+  return false;
+}
+
+function showModal(win) {
+  const overlay = document.createElement('div');
+  overlay.className = 'overlay';
+  overlay.innerHTML = `
+    <div class="modal ${win ? 'modal-win' : 'modal-lose'}">
+      <h2>${win ? '🏆 胜利！' : '💀 战败'}</h2>
+      <p>${win ? '勇者成功击败了魔王！' : '魔王太强大了，再试一次吧！'}</p>
+      <button class="restart-btn" onclick="resetGame()">再来一局</button>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+}
+
+function resetGame() {
+  document.querySelector('.overlay')?.remove();
+  player = { hp: 100, maxHp: 100, mp: 50, maxMp: 50, def: false };
+  enemy  = { hp: 150, maxHp: 150, mp: 40, maxMp: 40, def: false };
+  isPlayerTurn = true;
+  gameOver = false;
+  document.getElementById('log').innerHTML = '';
+  log('战斗开始！勇者 VS 魔王', 'log-system');
+  updateUI();
+}
+
+function playerAction(action) {
+  if (!isPlayerTurn || gameOver) return;
+  
+  const skill = SKILLS[action];
+  if (player.mp < skill.mp) {
+    log('MP 不足！', 'log-system');
+    return;
+  }
+  
+  player.mp -= skill.mp;
+  player.def = false;
+  
+  if (skill.type === 'atk') {
+    if (skill.missChance && Math.random() < skill.missChance) {
+      log(`你使用了${skill.name}... 未命中！`, 'log-player');
+    } else {
+      let dmg = rand(skill.dmgMin, skill.dmgMax);
+      if (enemy.def) dmg = Math.floor(dmg * 0.5);
+      enemy.hp -= dmg;
+      log(`你使用<span class="log-damage">${skill.name}</span>，对魔王造成 <span class="log-damage">${dmg}</span> 点伤害！`, 'log-player');
+      showDamage('enemyBox', `-${dmg}`, '#ff6b6b');
+    }
+  } else if (skill.type === 'heal') {
+    let heal = rand(skill.healMin, skill.healMax);
+    player.hp = Math.min(player.maxHp, player.hp + heal);
+    log(`你使用<span class="log-heal">${skill.name}</span>，回复了 <span class="log-heal">${heal}</span> 点生命！`, 'log-player');
+    showDamage('playerBox', `+${heal}`, '#00ff88');
+  } else if (skill.type === 'def') {
+    player.def = true;
+    log(`你进入<span class="log-system">${skill.name}</span>，下回合受到的伤害减半！`, 'log-player');
+  }
+  
+  player.mp = Math.min(player.maxMp, player.mp + 5);
+  updateUI();
+  
+  if (!checkWin()) {
+    isPlayerTurn = false;
+    updateUI();
+    setTimeout(enemyTurn, 900);
+  }
+}
+
+function enemyTurn() {
+  if (gameOver) return;
+  
+  enemy.def = false;
+  
+  const actions = [];
+  if (enemy.mp >= 15) actions.push('heavy');
+  if (enemy.mp >= 12 && enemy.hp < enemy.maxHp * 0.4) actions.push('heal');
+  if (enemy.mp >= 8 && Math.random() < 0.3) actions.push('defend');
+  actions.push('attack');
+  
+  const action = actions[rand(0, actions.length - 1)];
+  const skill = SKILLS[action];
+  
+  enemy.mp -= skill.mp;
+  
+  if (skill.type === 'atk') {
+    if (skill.missChance && Math.random() < skill.missChance) {
+      log(`魔王使用了${skill.name}... 未命中！`, 'log-enemy');
+    } else {
+      let dmg = rand(skill.dmgMin, skill.dmgMax);
+      if (player.def) dmg = Math.floor(dmg * 0.5);
+      player.hp -= dmg;
+      log(`魔王使用<span class="log-damage">${skill.name}</span>，对你造成 <span class="log-damage">${dmg}</span> 点伤害！`, 'log-enemy');
+      showDamage('playerBox', `-${dmg}`, '#ff6b6b');
+    }
+  } else if (skill.type === 'heal') {
+    let heal = rand(skill.healMin, skill.healMax);
+    enemy.hp = Math.min(enemy.maxHp, enemy.hp + heal);
+    log(`魔王使用<span class="log-heal">${skill.name}</span>，回复了 <span class="log-heal">${heal}</span> 点生命！`, 'log-enemy');
+    showDamage('enemyBox', `+${heal}`, '#00ff88');
+  } else if (skill.type === 'def') {
+    enemy.def = true;
+    log(`魔王进入<span class="log-system">${skill.name}</span>！`, 'log-enemy');
+  }
+  
+  enemy.mp = Math.min(enemy.maxMp, enemy.mp + 5);
+  updateUI();
+  
+  if (!checkWin()) {
+    isPlayerTurn = true;
+    updateUI();
+  }
+}
+
+log('战斗开始！勇者 VS 魔王', 'log-system');
+log('你的回合 - 点击下方技能进行攻击', 'log-system');
+updateUI();
+</script>
+
+</body>
+</html>
